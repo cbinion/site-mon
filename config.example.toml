@@ -1,0 +1,15 @@
+[general]
+connection_string = ""
+# Where should the alert notifications be sent to
+alert_email = "person@example.com"
+
+# How often are the targets being checked (hours)
+check_interval = 12
+# How many days before cert expiration are alerts being sent
+alert_interval = [ 14, 7, 1 ]
+
+[[target]]
+hostname = "example.com"
+port = 443
+expect_status = 200
+

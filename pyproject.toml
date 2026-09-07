@@ -1,7 +1,7 @@
 [project]
 name = "site-mon"
 version = "0.1.0"
-description = "Website TLS and HTTP Availability monitor "
+description = "Website TLS certificate and HTTP availability monitor"
 readme = "README.md"
 authors = [
     { name = "cbinion", email = "134014495+cbinion@users.noreply.github.com" }
@@ -10,7 +10,7 @@ requires-python = ">=3.14"
 dependencies = []
 
 [project.scripts]
-site-mon = "site_mon:main"
+site-mon = "site_mon.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.8,<0.13.0"]

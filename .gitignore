@@ -15,6 +15,7 @@ build/
 config.toml
 .env
 CLAUDE.md
+NOTES.md
 
 # Local database
 *.db

@@ -1,3 +1,3 @@
-# sitemon
+# site-mon
 
-A simple website TLS and HTTP availability monitor 
+A simple website TLS certificate and HTTP availability monitor 
