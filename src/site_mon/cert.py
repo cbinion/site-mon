@@ -8,6 +8,7 @@ from typing import Self
 class CertParseError(Exception):
     pass
 
+
 @dataclass(frozen=True)
 class Certificate:
     subject: str
