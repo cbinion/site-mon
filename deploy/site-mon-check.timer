@@ -1,0 +1,13 @@
+[Unit]
+Description=Run site-mon every six hours
+
+[Timer]
+OnCalendar=*-*-* 00/6:00:00
+# Run a missed check on boot rather than waiting for the next window. The
+# whole point is not to sleep through a certificate expiry window.
+Persistent=true
+# Avoid hitting every monitored host at the same instant.
+RandomizedDelaySec=5m
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,19 @@
+[Unit]
+Description=site-mon certificate and availability check
+Documentation=https://github.com/cbinion/site-mon
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker run --rm \
+    --name site-mon-check \
+    --env-file /etc/site-mon/secrets.env \
+    --volume /srv/site-mon/config.toml:/config/config.toml:ro \
+    --volume /srv/site-mon/data:/data \
+    site-mon:latest \
+    --config /config/config.toml --db /data/site-mon.db check
+
+# A failed check should be visible in `systemctl status`, not silently retried.
+Restart=no
