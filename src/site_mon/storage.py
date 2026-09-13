@@ -2,6 +2,7 @@ import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 from site_mon.alerts import CertAlert
 from site_mon.monitor import CheckResult, Outcome
@@ -62,6 +63,15 @@ def connect(path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     # The worker writes while the status endpoint reads; WAL lets those overlap.
     conn.execute("PRAGMA journal_mode=WAL")
+    return conn
+
+
+def connect_readonly(path: Path) -> sqlite3.Connection:
+    """Open the database for reading only, so a bug here can never write."""
+    # A URI filename, so spaces and other awkward path characters survive.
+    uri = f"file:{quote(path.as_posix(), safe='/:')}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True)
+    conn.row_factory = sqlite3.Row
     return conn
 
 
@@ -148,3 +158,14 @@ def record_status_alert(
             """,
             (hostname, str(outcome), _to_text(sent_at)),
         )
+
+
+def latest_per_target(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """The most recent check for each hostname, ordered by hostname."""
+    return conn.execute(
+        """
+        SELECT * FROM checks AS c
+        WHERE c.id = (SELECT MAX(id) FROM checks WHERE hostname = c.hostname)
+        ORDER BY c.hostname
+        """
+    ).fetchall()

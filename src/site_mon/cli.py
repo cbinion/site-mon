@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from sqlite3 import Connection
 
+import uvicorn
+
 from site_mon.alerts import (
     DEFAULT_ALERT_PERIOD,
     AlertDeliveryError,
@@ -14,6 +16,7 @@ from site_mon.alerts import (
     send_discord,
     status_content,
 )
+from site_mon.api import create_app
 from site_mon.monitor import CheckResult, Outcome, check
 from site_mon.storage import (
     connect,
@@ -45,9 +48,32 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("check", help="run one pass over all targets and exit")
 
+    serve = sub.add_parser("serve", help="serve the status endpoint")
+    serve.add_argument("--host", default="127.0.0.1", help="default: 127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000, help="default: 8000")
+
     args = parser.parse_args()
 
-    with args.config.open("rb") as f:
+    if args.command == "serve":
+        return _serve(args.db, args.host, args.port)
+    return _check_all(args.config, args.db)
+
+
+def _serve(db_path: Path, host: str, port: int) -> int:
+    # Create the schema up front so the API starts cleanly on a box where no
+    # check has run yet. Request handling itself is read-only.
+    conn = connect(db_path)
+    try:
+        init_db(conn)
+    finally:
+        conn.close()
+
+    uvicorn.run(create_app(db_path), host=host, port=port)
+    return 0
+
+
+def _check_all(config_path: Path, db_path: Path) -> int:
+    with config_path.open("rb") as f:
         config = tomllib.load(f)
 
     general = config.get("general", {})
@@ -55,7 +81,7 @@ def main() -> int:
     discord = config.get("discord", {})
     webhook_url = os.environ.get(WEBHOOK_ENV) or discord.get("webhook_url")
 
-    conn = connect(args.db)
+    conn = connect(db_path)
     try:
         init_db(conn)
         now = datetime.now(UTC)
