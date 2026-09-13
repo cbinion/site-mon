@@ -1,0 +1,22 @@
+# Never let the real config or a local database into an image layer.
+config.toml
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+
+.git/
+.github/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+tests/
+deploy/
+CLAUDE.md
+NOTES.md
+Dockerfile
+.dockerignore
