@@ -72,9 +72,35 @@ def _serve(db_path: Path, host: str, port: int) -> int:
     return 0
 
 
+class ConfigError(Exception):
+    """The config file is wrong. Not a bug in this codebase."""
+
+
+def validate_hostname(hostname: str) -> None:
+    """Reject pasted URLs, which otherwise enter the history as real hostnames."""
+    if not hostname:
+        raise ConfigError("a target has an empty hostname")
+    if any(character.isspace() for character in hostname):
+        raise ConfigError(f'hostname "{hostname}" contains whitespace')
+    for character in ("/", ":"):
+        if character in hostname:
+            raise ConfigError(
+                f'hostname "{hostname}" looks like a URL. Use a bare hostname '
+                f'with no "{character}"; set the port with the port key.'
+            )
+
+
 def _check_all(config_path: Path, db_path: Path) -> int:
     with config_path.open("rb") as f:
         config = tomllib.load(f)
+
+    targets = config["target"]
+    try:
+        for target in targets:
+            validate_hostname(target["hostname"])
+    except ConfigError as e:
+        print(f"config error: {e}")
+        return 1
 
     general = config.get("general", {})
     alert_period = tuple(general.get("alert_period", DEFAULT_ALERT_PERIOD))
@@ -84,8 +110,10 @@ def _check_all(config_path: Path, db_path: Path) -> int:
     conn = connect(db_path)
     try:
         init_db(conn)
+        # One timestamp for the whole run. The status endpoint scopes itself to
+        # a single run by matching on it, so do not move this into the loop.
         now = datetime.now(UTC)
-        for target in config["target"]:
+        for target in targets:
             result = check(target, now)
             record(conn, result)
             print(_format(result))
