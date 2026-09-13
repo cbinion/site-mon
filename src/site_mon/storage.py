@@ -3,6 +3,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+from site_mon.alerts import CertAlert
 from site_mon.monitor import CheckResult
 
 SCHEMA = """
@@ -25,6 +26,15 @@ CREATE TABLE IF NOT EXISTS checks (
 
 CREATE INDEX IF NOT EXISTS idx_checks_host_time
     ON checks (hostname, checked_at DESC);
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id             INTEGER PRIMARY KEY,
+    sent_at        TEXT    NOT NULL,
+    hostname       TEXT    NOT NULL,
+    cert_not_after TEXT    NOT NULL,
+    threshold      INTEGER NOT NULL,
+    UNIQUE (hostname, cert_not_after, threshold)
+);
 """
 
 INSERT = """
@@ -79,3 +89,32 @@ def _to_row(result: CheckResult) -> dict:
 
 def _to_text(value: datetime | None) -> str | None:
     return value.isoformat() if value is not None else None
+
+
+def sent_thresholds(
+    conn: sqlite3.Connection, hostname: str, cert_not_after: datetime
+) -> set[int]:
+    rows = conn.execute(
+        "SELECT threshold FROM alerts WHERE hostname = ? AND cert_not_after = ?",
+        (hostname, _to_text(cert_not_after)),
+    )
+    return {threshold for (threshold,) in rows}
+
+
+def record_alert(conn: sqlite3.Connection, alert: CertAlert, sent_at: datetime) -> None:
+    with conn:
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO alerts (sent_at, hostname, cert_not_after, threshold)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                (
+                    _to_text(sent_at),
+                    alert.hostname,
+                    _to_text(alert.cert_not_after),
+                    threshold,
+                )
+                for threshold in alert.thresholds_crossed
+            ],
+        )

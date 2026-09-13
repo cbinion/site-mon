@@ -1,11 +1,16 @@
 [general]
-# How often are the targets being checked (hours)
-check_interval = 12
 # How many days before cert expiration are alerts being sent
 alert_period = [ 14, 7, 1 ]
+
+[discord]
+# Channel webhook. Overridden by SITE_MON_DISCORD_WEBHOOK if that is set.
+webhook_url = "https://discord.com/api/webhooks/000000000/xxxxxxxx"
+# Numeric snowflake IDs, not usernames. Enable Developer Mode in Discord,
+# then right-click a user or role and Copy ID. Both are optional.
+mention_user_id = "000000000000000000"
+# mention_role_id = "000000000000000000"
 
 [[target]]
 hostname = "example.com"
 port = 443
 expect_status = 200
-
