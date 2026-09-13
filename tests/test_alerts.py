@@ -5,6 +5,7 @@ from site_mon.alerts import (
     due_alert,
     due_status_alert,
     mention_for,
+    scrub,
     status_content,
 )
 from site_mon.monitor import CheckResult, Outcome
@@ -174,4 +175,11 @@ def test_first_ever_failure_has_no_previous_clause():
     alert = due_status_alert(unreachable(), None)
     assert status_content(alert) == (
         "**example.com** check failed: unreachable\nno route to host"
+    )
+
+
+def test_scrub_keeps_the_webhook_url_out_of_error_text():
+    url = "https://discord.com/api/webhooks/123/secrettoken"
+    assert scrub(f"401 Client Error for url: {url}", url) == (
+        "401 Client Error for url: <webhook url>"
     )

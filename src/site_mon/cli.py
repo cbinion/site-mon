@@ -7,6 +7,7 @@ from sqlite3 import Connection
 
 from site_mon.alerts import (
     DEFAULT_ALERT_PERIOD,
+    AlertDeliveryError,
     cert_content,
     due_alert,
     due_status_alert,
@@ -119,7 +120,7 @@ def _deliver(webhook_url: str, text: str, discord: dict, ping: bool) -> bool:
             user_id=discord.get("mention_user_id") if ping else None,
             role_id=discord.get("mention_role_id") if ping else None,
         )
-    except OSError as e:
+    except AlertDeliveryError as e:
         print(f"  alert delivery failed: {e}")
         return False
     return True

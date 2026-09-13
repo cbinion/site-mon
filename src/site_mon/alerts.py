@@ -9,6 +9,10 @@ DEFAULT_ALERT_PERIOD = (14, 7, 1)
 WEBHOOK_TIMEOUT = 10
 
 
+class AlertDeliveryError(Exception):
+    """The alert could not be delivered. Never carries the webhook URL."""
+
+
 @dataclass(frozen=True)
 class CertAlert:
     hostname: str
@@ -108,9 +112,20 @@ def send_discord(
 ) -> None:
     mention, allowed = mention_for(user_id, role_id)
     content = f"{mention}\n{text}" if mention else text
-    response = requests.post(
-        webhook_url,
-        json={"content": content, "allowed_mentions": allowed},
-        timeout=WEBHOOK_TIMEOUT,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.post(
+            webhook_url,
+            json={"content": content, "allowed_mentions": allowed},
+            timeout=WEBHOOK_TIMEOUT,
+        )
+    except OSError as e:
+        raise AlertDeliveryError(scrub(str(e), webhook_url)) from e
+
+    if not response.ok:
+        detail = scrub(response.text[:200], webhook_url)
+        raise AlertDeliveryError(f"webhook returned {response.status_code}: {detail}")
+
+
+def scrub(message: str, webhook_url: str) -> str:
+    """Keep the webhook URL out of anything we print. It is a credential."""
+    return message.replace(webhook_url, "<webhook url>")
