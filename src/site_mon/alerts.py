@@ -3,7 +3,7 @@ from datetime import datetime
 
 import requests
 
-from site_mon.monitor import CheckResult
+from site_mon.monitor import CheckResult, Outcome
 
 DEFAULT_ALERT_PERIOD = (14, 7, 1)
 WEBHOOK_TIMEOUT = 10
@@ -15,6 +15,14 @@ class CertAlert:
     cert_not_after: datetime
     days_remaining: int
     thresholds_crossed: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class StatusAlert:
+    hostname: str
+    outcome: Outcome
+    previous: Outcome | None
+    error: str | None = None
 
 
 def due_alert(
@@ -44,15 +52,37 @@ def due_alert(
     )
 
 
-def content(alert: CertAlert, mention: str | None = None) -> str:
+def due_status_alert(
+    result: CheckResult, last_notified: Outcome | None
+) -> StatusAlert | None:
+    """Alert whenever reality differs from what we last told the user. Pure."""
+    if last_notified is None:
+        if result.outcome is Outcome.OK:
+            return None
+    elif result.outcome is last_notified:
+        return None
+
+    return StatusAlert(
+        hostname=result.hostname,
+        outcome=result.outcome,
+        previous=last_notified,
+        error=result.error,
+    )
+
+
+def cert_content(alert: CertAlert) -> str:
     days = "1 day" if alert.days_remaining == 1 else f"{alert.days_remaining} days"
     expires = alert.cert_not_after.strftime("%Y-%m-%d %H:%M UTC")
-    lines = [
-        f"**{alert.hostname}** certificate expires in {days} (on {expires})",
-    ]
-    if mention:
-        lines.insert(0, mention)
-    return "\n".join(lines)
+    return f"**{alert.hostname}** certificate expires in {days} (on {expires})"
+
+
+def status_content(alert: StatusAlert) -> str:
+    was = f" (was {alert.previous})" if alert.previous else ""
+    if alert.outcome is Outcome.OK:
+        return f"**{alert.hostname}** recovered{was}"
+
+    line = f"**{alert.hostname}** check failed: {alert.outcome}{was}"
+    return f"{line}\n{alert.error}" if alert.error else line
 
 
 def mention_for(user_id: str | None, role_id: str | None) -> tuple[str | None, dict]:
@@ -72,14 +102,15 @@ def mention_for(user_id: str | None, role_id: str | None) -> tuple[str | None, d
 
 def send_discord(
     webhook_url: str,
-    alert: CertAlert,
+    text: str,
     user_id: str | None = None,
     role_id: str | None = None,
 ) -> None:
     mention, allowed = mention_for(user_id, role_id)
+    content = f"{mention}\n{text}" if mention else text
     response = requests.post(
         webhook_url,
-        json={"content": content(alert, mention), "allowed_mentions": allowed},
+        json={"content": content, "allowed_mentions": allowed},
         timeout=WEBHOOK_TIMEOUT,
     )
     response.raise_for_status()

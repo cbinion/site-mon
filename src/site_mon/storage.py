@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from site_mon.alerts import CertAlert
-from site_mon.monitor import CheckResult
+from site_mon.monitor import CheckResult, Outcome
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS checks (
@@ -34,6 +34,12 @@ CREATE TABLE IF NOT EXISTS alerts (
     cert_not_after TEXT    NOT NULL,
     threshold      INTEGER NOT NULL,
     UNIQUE (hostname, cert_not_after, threshold)
+);
+
+CREATE TABLE IF NOT EXISTS notified_status (
+    hostname TEXT PRIMARY KEY,
+    outcome  TEXT NOT NULL,
+    sent_at  TEXT NOT NULL
 );
 """
 
@@ -117,4 +123,28 @@ def record_alert(conn: sqlite3.Connection, alert: CertAlert, sent_at: datetime) 
                 )
                 for threshold in alert.thresholds_crossed
             ],
+        )
+
+
+def last_notified_outcome(conn: sqlite3.Connection, hostname: str) -> Outcome | None:
+    """The outcome the user was last told about, not the last one observed."""
+    row = conn.execute(
+        "SELECT outcome FROM notified_status WHERE hostname = ?", (hostname,)
+    ).fetchone()
+    return Outcome(row[0]) if row else None
+
+
+def record_status_alert(
+    conn: sqlite3.Connection, hostname: str, outcome: Outcome, sent_at: datetime
+) -> None:
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO notified_status (hostname, outcome, sent_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT (hostname) DO UPDATE SET
+                outcome = excluded.outcome,
+                sent_at = excluded.sent_at
+            """,
+            (hostname, str(outcome), _to_text(sent_at)),
         )

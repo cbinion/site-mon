@@ -5,9 +5,24 @@ from datetime import UTC, datetime
 from pathlib import Path
 from sqlite3 import Connection
 
-from site_mon.alerts import DEFAULT_ALERT_PERIOD, due_alert, send_discord
-from site_mon.monitor import CheckResult, check
-from site_mon.storage import connect, init_db, record, record_alert, sent_thresholds
+from site_mon.alerts import (
+    DEFAULT_ALERT_PERIOD,
+    cert_content,
+    due_alert,
+    due_status_alert,
+    send_discord,
+    status_content,
+)
+from site_mon.monitor import CheckResult, Outcome, check
+from site_mon.storage import (
+    connect,
+    init_db,
+    last_notified_outcome,
+    record,
+    record_alert,
+    record_status_alert,
+    sent_thresholds,
+)
 
 WEBHOOK_ENV = "SITE_MON_DISCORD_WEBHOOK"
 
@@ -48,14 +63,33 @@ def main() -> int:
             record(conn, result)
             print(_format(result))
             if webhook_url:
-                _alert_if_due(conn, result, now, alert_period, webhook_url, discord)
+                _status_alert(conn, result, now, webhook_url, discord)
+                _cert_alert(conn, result, now, alert_period, webhook_url, discord)
     finally:
         conn.close()
 
     return 0
 
 
-def _alert_if_due(
+def _status_alert(
+    conn: Connection,
+    result: CheckResult,
+    now: datetime,
+    webhook_url: str,
+    discord: dict,
+) -> None:
+    alert = due_status_alert(result, last_notified_outcome(conn, result.hostname))
+    if alert is None:
+        return
+
+    # Recoveries are good news, so they land in the channel without a ping.
+    ping = alert.outcome is not Outcome.OK
+    if _deliver(webhook_url, status_content(alert), discord, ping):
+        record_status_alert(conn, alert.hostname, alert.outcome, now)
+        print(f"  alerted: {alert.hostname} is {alert.outcome}")
+
+
+def _cert_alert(
     conn: Connection,
     result: CheckResult,
     now: datetime,
@@ -71,20 +105,24 @@ def _alert_if_due(
     if alert is None:
         return
 
+    if _deliver(webhook_url, cert_content(alert), discord, ping=True):
+        record_alert(conn, alert, now)
+        print(f"  alerted: {alert.hostname} at {alert.days_remaining} days")
+
+
+def _deliver(webhook_url: str, text: str, discord: dict, ping: bool) -> bool:
+    """Send one message. Returns False so the caller leaves it unrecorded and retries."""
     try:
         send_discord(
             webhook_url,
-            alert,
-            user_id=discord.get("mention_user_id"),
-            role_id=discord.get("mention_role_id"),
+            text,
+            user_id=discord.get("mention_user_id") if ping else None,
+            role_id=discord.get("mention_role_id") if ping else None,
         )
     except OSError as e:
-        # Leave it unrecorded so the next run retries rather than losing the alert.
-        print(f"  alert delivery failed for {alert.hostname}: {e}")
-        return
-
-    record_alert(conn, alert, now)
-    print(f"  alerted: {alert.hostname} at {alert.days_remaining} days")
+        print(f"  alert delivery failed: {e}")
+        return False
+    return True
 
 
 def _format(result: CheckResult) -> str:
