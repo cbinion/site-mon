@@ -77,14 +77,28 @@ def test_a_target_with_no_readable_cert_reports_null(client):
     assert target["cert"] is None
 
 
-def test_only_the_most_recent_check_per_host_is_reported(client):
+EARLIER = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
+
+
+def test_only_the_most_recent_run_is_reported(client):
     http, conn = client
-    record(conn, healthy("example.com", checked_at=NOW, days=44))
-    record(conn, broken("example.com"))
+    record(conn, healthy("example.com", checked_at=EARLIER))
+    record(conn, healthy("example.com", checked_at=NOW))
 
     targets = http.get("/status").json()["targets"]
     assert len(targets) == 1
-    assert targets[0]["outcome"] == "cert_invalid"
+    assert targets[0]["checked_at"] == NOW.isoformat()
+
+
+def test_a_target_dropped_from_the_config_stops_appearing(client):
+    http, conn = client
+    record(conn, healthy("retired.example.com", checked_at=EARLIER))
+    record(conn, healthy("kept.example.com", checked_at=EARLIER))
+    # The next run no longer includes retired.example.com.
+    record(conn, healthy("kept.example.com", checked_at=NOW))
+
+    names = [t["hostname"] for t in http.get("/status").json()["targets"]]
+    assert names == ["kept.example.com"]
 
 
 def test_targets_are_ordered_by_hostname(client):

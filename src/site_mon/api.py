@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-from site_mon.storage import connect_readonly, latest_per_target
+from site_mon.storage import connect_readonly, latest_run
 
 
 def create_app(db_path: Path) -> FastAPI:
@@ -15,7 +15,7 @@ def create_app(db_path: Path) -> FastAPI:
     def status() -> dict:
         conn = connect_readonly(db_path)
         try:
-            rows = latest_per_target(conn)
+            rows = latest_run(conn)
         finally:
             conn.close()
 

@@ -160,12 +160,17 @@ def record_status_alert(
         )
 
 
-def latest_per_target(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    """The most recent check for each hostname, ordered by hostname."""
+def latest_run(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Every check from the most recent run, ordered by hostname.
+
+    Scoped to one run rather than to the newest row per hostname, so a target
+    removed from the config stops appearing instead of lingering forever.
+    One run shares one checked_at; see the comment in cli._check_all.
+    """
     return conn.execute(
         """
-        SELECT * FROM checks AS c
-        WHERE c.id = (SELECT MAX(id) FROM checks WHERE hostname = c.hostname)
-        ORDER BY c.hostname
+        SELECT * FROM checks
+        WHERE checked_at = (SELECT MAX(checked_at) FROM checks)
+        ORDER BY hostname
         """
     ).fetchall()
